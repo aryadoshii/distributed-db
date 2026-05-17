@@ -79,13 +79,23 @@ public class BTreeLeaf extends BTreeNode {
             return;
         }
 
-        // Shift entries right to make room
-        for (int i = n; i > pos; i--) {
-            int prevKey = getKey(i - 1);
-            byte[] prevVal = getValue(i - 1);
-            setEntry(i, prevKey, prevVal);
+        // Read entries that must shift right, then write left-to-right.
+        // Writing right-to-left with variable-length values leaves stale bytes
+        // between entries when the new value is shorter than the displaced one,
+        // causing entryOffset() to compute wrong positions on the next read.
+        int[] savedKeys = new int[n - pos];
+        byte[][] savedVals = new byte[n - pos][];
+        for (int i = 0; i < n - pos; i++) {
+            savedKeys[i] = getKey(pos + i);
+            savedVals[i] = getValue(pos + i);
         }
-        setEntry(pos, key, value);
+
+        setEntry(pos, key, value);  // new entry lands at the correct old offset
+        for (int i = 0; i < savedKeys.length; i++) {
+            // left-to-right: entryOffset(pos+1+i) rescans the already-written
+            // entries 0..pos+i and gets the right byte position each time
+            setEntry(pos + 1 + i, savedKeys[i], savedVals[i]);
+        }
         setNumKeys(n + 1);
     }
 
