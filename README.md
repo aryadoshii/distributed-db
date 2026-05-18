@@ -29,23 +29,23 @@ fully operational with 315 passing tests.
 
 ```
 ┌─────────────────────────────────────────────────┐
-│                  Client Layer                    │
-│         CLI shell · JDBC driver · Pool           │
+│                  Client Layer                   │
+│         CLI shell · JDBC driver · Pool          │
 ├─────────────────────────────────────────────────┤
-│                  SQL Engine                      │
+│                  SQL Engine                     │
 │     Lexer → Parser → AST → Planner → Executor   │
 ├─────────────────────────────────────────────────┤
-│             Transaction Manager                  │
-│      MVCC · Snapshot isolation · 2PL locks       │
+│             Transaction Manager                 │
+│      MVCC · Snapshot isolation · 2PL locks      │
 ├─────────────────────────────────────────────────┤
-│               Storage Engine                     │
-│    Buffer pool · B+ tree · WAL · Page manager    │
+│               Storage Engine                    │
+│    Buffer pool · B+ tree · WAL · Page manager   │
 ├─────────────────────────────────────────────────┤
-│              Raft Consensus                      │
-│    Leader election · Log replication · Snapshots │
+│              Raft Consensus                     │
+│   Leader election · Log replication · Snapshots │
 ├─────────────────────────────────────────────────┤
-│             Network Transport                    │
-│       Netty RPC · Protobuf · Cluster topology    │
+│             Network Transport                   │
+│       Netty RPC · Protobuf · Cluster topology   │
 └─────────────────────────────────────────────────┘
 ```
 
