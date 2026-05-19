@@ -82,4 +82,28 @@ public class DatabaseStateMachine implements StateMachine {
     public int lastAppliedIndex() {
         return lastApplied.get();
     }
+
+    /**
+     * Execute a SELECT directly against the local storage engine, bypassing
+     * Raft and the idempotency check. Used by DBServer for leader-local reads.
+     */
+    public String executeQuery(String sql) {
+        try {
+            Statement stmt = Parser.parseSQL(sql);
+            Operator  op   = planner.plan(stmt);
+            List<Row> results = new ArrayList<>();
+            op.open();
+            try {
+                Row row;
+                while ((row = op.next()) != null) results.add(row);
+            } finally {
+                op.close();
+            }
+            StringBuilder sb = new StringBuilder();
+            for (Row row : results) sb.append(row.toString()).append("\n");
+            return sb.toString();
+        } catch (Exception e) {
+            return "ERROR: " + e.getMessage();
+        }
+    }
 }
