@@ -6,11 +6,11 @@ package db.txn.mvcc;
  */
 public final class VersionedRow {
 
-    public final long         txnId;      // writer's transaction ID
-    public final byte[]       value;      // serialized row data (null if deleted)
-    public final boolean      deleted;    // true = tombstone
-    volatile     boolean      committed;  // set true on commit, remains false on abort
-    public final VersionedRow prev;       // older version, or null if first
+    private final long         txnId;
+    private final byte[]       value;
+    private final boolean      deleted;
+    private volatile boolean   committed;
+    private final VersionedRow prev;
 
     public VersionedRow(long txnId, byte[] value, boolean deleted, VersionedRow prev) {
         this.txnId     = txnId;
@@ -20,7 +20,12 @@ public final class VersionedRow {
         this.prev      = prev;
     }
 
-    public boolean isCommitted() { return committed; }
+    public long         getTxnId()     { return txnId; }
+    public byte[]       getValue()     { return value; }
+    public boolean      isDeleted()    { return deleted; }
+    public boolean      isCommitted()  { return committed; }
+    public VersionedRow getPrev()      { return prev; }
+
     public void markCommitted() { this.committed = true; }
     public void markAborted()   { /* committed stays false; version becomes permanently invisible */ }
 }

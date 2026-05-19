@@ -5,6 +5,7 @@ import db.sql.ast.Statement;
 import db.sql.parser.Parser;
 import db.storage.buffer.BufferPool;
 import db.storage.page.DiskManager;
+import db.txn.TransactionManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,17 +23,19 @@ class ExecutorIntegrationTest {
     @TempDir
     Path tempDir;
 
-    private DiskManager diskManager;
-    private BufferPool  bufferPool;
-    private Catalog     catalog;
-    private Planner     planner;
+    private DiskManager        diskManager;
+    private BufferPool         bufferPool;
+    private Catalog            catalog;
+    private Planner            planner;
+    private TransactionManager txnManager;
 
     @BeforeEach
     void setUp() throws IOException {
         diskManager = new DiskManager(tempDir.resolve("test.db"));
         bufferPool  = new BufferPool(64, diskManager);
         catalog     = new Catalog();
-        planner     = new Planner(catalog, bufferPool);
+        txnManager  = new TransactionManager();
+        planner     = new Planner(catalog, bufferPool, txnManager);
     }
 
     @AfterEach

@@ -47,7 +47,7 @@ public final class TransactionManager {
         }
 
         Snapshot    snapshot = new Snapshot(txnId, activeSnapshot);
-        Transaction txn      = new Transaction(txnId, snapshot);
+        Transaction txn      = new Transaction(txnId, snapshot, this);
         activeTxns.put(txnId, txn);
         currentTxn.set(txn);
         return txn;
@@ -61,7 +61,8 @@ public final class TransactionManager {
      */
     public void commit(Transaction txn) {
         if (txn.getStatus() != TxnStatus.ACTIVE)
-            throw new IllegalStateException("Cannot commit txn " + txn.txnId + ": " + txn.getStatus());
+            throw new IllegalStateException(
+                "Cannot commit txn " + txn.getTxnId() + ": " + txn.getStatus());
 
         for (VersionedRow version : txn.getWriteSet()) {
             version.markCommitted();
@@ -87,8 +88,8 @@ public final class TransactionManager {
     }
 
     private void finalize(Transaction txn) {
-        lockManager.releaseAll(txn.txnId, txn.getLockSet());
-        activeTxns.remove(txn.txnId);
+        lockManager.releaseAll(txn.getTxnId(), txn.getLockSet());
+        activeTxns.remove(txn.getTxnId());
         if (currentTxn.get() == txn) currentTxn.remove();
     }
 
@@ -102,7 +103,7 @@ public final class TransactionManager {
      */
     public void acquireWriteLock(Transaction txn, int rowKey)
             throws DeadlockException, LockTimeoutException, InterruptedException {
-        lockManager.acquireWriteLock(txn.txnId, rowKey);
+        lockManager.acquireWriteLock(txn.getTxnId(), rowKey);
         txn.addLock(rowKey);
     }
 
