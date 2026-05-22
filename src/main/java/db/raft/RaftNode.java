@@ -74,12 +74,12 @@ public class RaftNode {
     // ---------------------------------------------------------------
 
     private final ReentrantLock          raftLock;
-    private final ScheduledExecutorService scheduler;
+    private ScheduledExecutorService      scheduler;
     private ScheduledFuture<?>           electionTimer;
     private ScheduledFuture<?>           heartbeatTimer;
 
     // Apply loop runs on a separate thread
-    private final ExecutorService        applyExecutor;
+    private ExecutorService              applyExecutor;
 
     // ---------------------------------------------------------------
     //  Constructor
@@ -118,8 +118,22 @@ public class RaftNode {
         BiFunction<Integer, AppendEntries.Request,
                    CompletableFuture<AppendEntries.Response>> appendEntriesFn
     ) {
+        // Recreate executors when restarting a previously stopped node
+        if (scheduler.isShutdown()) {
+            scheduler = Executors.newScheduledThreadPool(2);
+        }
+        if (applyExecutor.isShutdown()) {
+            applyExecutor = Executors.newSingleThreadExecutor();
+        }
         this.sendRequestVote   = requestVoteFn;
         this.sendAppendEntries = appendEntriesFn;
+        // Apply any entries committed while the node was stopped
+        raftLock.lock();
+        try {
+            if (commitIndex > lastApplied) triggerApply();
+        } finally {
+            raftLock.unlock();
+        }
         resetElectionTimer();
     }
 
@@ -446,27 +460,31 @@ public class RaftNode {
      * Runs on the applyExecutor thread — never blocks the Raft lock.
      */
     private void triggerApply() {
-        applyExecutor.submit(() -> {
-            raftLock.lock();
-            int upTo = commitIndex;
-            int from = lastApplied + 1;
-            raftLock.unlock();
-
-            for (int i = from; i <= upTo; i++) {
-                LogEntry entry;
+        try {
+            applyExecutor.submit(() -> {
                 raftLock.lock();
-                try { entry = log.get(i); }
-                finally { raftLock.unlock(); }
+                int upTo = commitIndex;
+                int from = lastApplied + 1;
+                raftLock.unlock();
 
-                if (!entry.isNoOp()) {
-                    stateMachine.apply(i, entry.getCommand());
+                for (int i = from; i <= upTo; i++) {
+                    LogEntry entry;
+                    raftLock.lock();
+                    try { entry = log.get(i); }
+                    finally { raftLock.unlock(); }
+
+                    if (!entry.isNoOp()) {
+                        stateMachine.apply(i, entry.getCommand());
+                    }
+
+                    raftLock.lock();
+                    try { lastApplied = i; }
+                    finally { raftLock.unlock(); }
                 }
-
-                raftLock.lock();
-                try { lastApplied = i; }
-                finally { raftLock.unlock(); }
-            }
-        });
+            });
+        } catch (RejectedExecutionException ignored) {
+            // Node is stopped — entries will be applied on restart
+        }
     }
 
     /**
@@ -479,29 +497,33 @@ public class RaftNode {
         sendHeartbeats();
 
         // Poll for commit in the apply executor
-        applyExecutor.submit(() -> {
-            // Wait until commitIndex >= logIndex
-            while (true) {
-                raftLock.lock();
-                int ci = commitIndex;
-                raftLock.unlock();
+        try {
+            applyExecutor.submit(() -> {
+                // Wait until commitIndex >= logIndex
+                while (true) {
+                    raftLock.lock();
+                    int ci = commitIndex;
+                    raftLock.unlock();
 
-                if (ci >= logIndex) {
-                    byte[] result = stateMachine.apply(
-                        logIndex, log.get(logIndex).getCommand()
-                    );
-                    future.complete(result);
-                    return;
-                }
+                    if (ci >= logIndex) {
+                        byte[] result = stateMachine.apply(
+                            logIndex, log.get(logIndex).getCommand()
+                        );
+                        future.complete(result);
+                        return;
+                    }
 
-                try { Thread.sleep(5); }
-                catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    future.completeExceptionally(e);
-                    return;
+                    try { Thread.sleep(5); }
+                    catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        future.completeExceptionally(e);
+                        return;
+                    }
                 }
-            }
-        });
+            });
+        } catch (RejectedExecutionException e) {
+            future.completeExceptionally(e);
+        }
     }
 
     // ---------------------------------------------------------------
